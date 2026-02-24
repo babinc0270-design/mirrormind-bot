@@ -326,7 +326,7 @@ if __name__ == "__main__":
     def home():
         return "MirrorMind Bot Running"
 
-        @flask_app.route("/webhook", methods=["POST"])
+    @flask_app.route("/webhook", methods=["POST"])
     def webhook():
         data = request.get_json(force=True)
         update = Update.de_json(data, application.bot)
