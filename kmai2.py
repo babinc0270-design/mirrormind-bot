@@ -301,42 +301,42 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.VIDEO, video_handler))
 
     async def main():
-    global application
+        global application
 
-    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+        application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+        
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("language", language_cmd))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+        application.add_handler(MessageHandler(filters.PHOTO, photo_handler))
+        application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, audio_handler))
+        application.add_handler(MessageHandler(filters.VIDEO, video_handler))
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("language", language_cmd))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
-    application.add_handler(MessageHandler(filters.PHOTO, photo_handler))
-    application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, audio_handler))
-    application.add_handler(MessageHandler(filters.VIDEO, video_handler))
+        await application.initialize()
+        await application.start()
+        await application.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
 
-    await application.initialize()
-    await application.start()
-    await application.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
-
-    await asyncio.Event().wait()
-    asyncio.run(main())
+        await asyncio.Event().wait()
+        asyncio.run(main())
 
 
     flask_app = Flask(__name__)
 
-@flask_app.route("/")
-def home():
-    return "MirrorMind Bot Running"
+        @flask_app.route("/")
+        def home():
+        return "MirrorMind Bot Running"
 
-@flask_app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, application.bot)
-    asyncio.run(application.process_update(update))
-    return "OK"
+        @flask_app.route("/webhook", methods=["POST"])
+        def webhook():
+        data = request.get_json(force=True)
+        update = Update.de_json(data, application.bot)
+        asyncio.run(application.process_update(update))
+        return "OK"
     if __name__ == "__main__":
-    import threading
+        import threading
 
-    PORT = int(os.environ.get("PORT", 10000))
+        PORT = int(os.environ.get("PORT", 10000))
 
-    threading.Thread(target=lambda: asyncio.run(main())).start()
+        threading.Thread(target=lambda: asyncio.run(main())).start()
 
-    flask_app.run(host="0.0.0.0", port=PORT)
+        flask_app.run(host="0.0.0.0", port=PORT)
