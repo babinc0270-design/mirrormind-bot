@@ -322,12 +322,12 @@ if __name__ == "__main__":
 
     flask_app = Flask(__name__)
 
-        @flask_app.route("/")
-        def home():
+    @flask_app.route("/")
+    def home():
         return "MirrorMind Bot Running"
 
         @flask_app.route("/webhook", methods=["POST"])
-        def webhook():
+    def webhook():
         data = request.get_json(force=True)
         update = Update.de_json(data, application.bot)
         asyncio.run(application.process_update(update))
