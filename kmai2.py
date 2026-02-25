@@ -1,9 +1,9 @@
 import os
 import sqlite3
-from flask import Flask, request
 import logging
 import asyncio
 from datetime import datetime
+from flask import Flask, request
 
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
@@ -24,9 +24,10 @@ from google.genai import types
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
-    raise ValueError("Set TELEGRAM_TOKEN and GEMINI_API_KEY environment variables.")
+if not TELEGRAM_TOKEN or not GEMINI_API_KEY or not WEBHOOK_URL:
+    raise ValueError("Missing environment variables.")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -107,7 +108,7 @@ def generate_ai(contents):
     try:
         response = client.models.generate_content(
             model="gemini-2.5-flash",
-            contents=contents
+            contents=contents,
         )
         return response.text
     except Exception as e:
@@ -205,7 +206,6 @@ Respond in 4–6 sentences.
 # PHOTO HANDLER
 # ==============================
 
-
 async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     photo = update.message.photo[-1]
@@ -228,7 +228,6 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ),
             ],
         )
-
         await update.message.reply_text(response.text)
 
     except Exception as e:
@@ -237,7 +236,7 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ==============================
-# SMART AUDIO HANDLER
+# AUDIO HANDLER
 # ==============================
 
 async def audio_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -264,7 +263,6 @@ async def audio_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ),
             ],
         )
-
         await update.message.reply_text(response.text)
 
     except Exception as e:
@@ -283,60 +281,53 @@ async def video_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ==============================
-# MAIN
+# FLASK + WEBHOOK
 # ==============================
 
+flask_app = Flask(__name__)
+application = None
+
+
+async def main():
+    global application
+
+    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("language", language_cmd))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+    application.add_handler(MessageHandler(filters.PHOTO, photo_handler))
+    application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, audio_handler))
+    application.add_handler(MessageHandler(filters.VIDEO, video_handler))
+
+    await application.initialize()
+    await application.start()
+    await application.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
+
+    print("Bot started successfully ✅")
+
+    await asyncio.Event().wait()
+
+
+@flask_app.route("/")
+def home():
+    return "MirrorMind Bot Running"
+
+
+@flask_app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.get_json(force=True)
+    update = Update.de_json(data, application.bot)
+
+    asyncio.create_task(application.process_update(update))
+
+    return "OK"
+
+
 if __name__ == "__main__":
+    import threading
 
     PORT = int(os.environ.get("PORT", 10000))
-    WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("language", language_cmd))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
-    app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
-    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, audio_handler))
-    app.add_handler(MessageHandler(filters.VIDEO, video_handler))
-
-    async def main():
-        global application
-
-        application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-        
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("language", language_cmd))
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
-        application.add_handler(MessageHandler(filters.PHOTO, photo_handler))
-        application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, audio_handler))
-        application.add_handler(MessageHandler(filters.VIDEO, video_handler))
-
-        await application.initialize()
-        await application.start()
-        await application.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
-
-        await asyncio.Event().wait()
-        asyncio.run(main())
-
-
-    flask_app = Flask(__name__)
-
-    @flask_app.route("/")
-    def home():
-        return "MirrorMind Bot Running"
-
-    @flask_app.route("/webhook", methods=["POST"])
-    def webhook():
-        data = request.get_json(force=True)
-        update = Update.de_json(data, application.bot)
-        asyncio.run(application.process_update(update))
-        return "OK"
-    if __name__ == "__main__":
-        import threading
-
-        PORT = int(os.environ.get("PORT", 10000))
-
-        threading.Thread(target=lambda: asyncio.run(main())).start()
-
-        flask_app.run(host="0.0.0.0", port=PORT)
+    threading.Thread(target=lambda: asyncio.run(main())).start()
+    flask_app.run(host="0.0.0.0", port=PORT)
