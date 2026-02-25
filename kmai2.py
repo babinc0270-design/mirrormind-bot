@@ -281,11 +281,13 @@ async def video_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ==============================
-# FLASK + WEBHOOK
+# FLASK + TELEGRAM WEBHOOK SERVER
 # ==============================
 
 flask_app = Flask(__name__)
+
 application = None
+event_loop = None
 
 
 async def main():
@@ -316,12 +318,14 @@ def home():
 
 @flask_app.route("/webhook", methods=["POST"])
 def webhook():
+    global event_loop
+
     data = request.get_json(force=True)
     update = Update.de_json(data, application.bot)
 
     asyncio.run_coroutine_threadsafe(
         application.process_update(update),
-        application._loop
+        event_loop
     )
 
     return "OK"
@@ -332,5 +336,14 @@ if __name__ == "__main__":
 
     PORT = int(os.environ.get("PORT", 10000))
 
-    threading.Thread(target=lambda: asyncio.run(main())).start()
+    # Create event loop manually
+    event_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(event_loop)
+
+    # Start bot inside loop
+    threading.Thread(
+        target=lambda: event_loop.run_until_complete(main()),
+        daemon=True
+    ).start()
+
     flask_app.run(host="0.0.0.0", port=PORT)
